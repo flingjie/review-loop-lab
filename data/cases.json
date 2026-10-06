@@ -1,0 +1,696 @@
+[
+  {
+    "id": "case-01",
+    "split": "revision",
+    "requirement": "金额均为非负整数分。优惠后应收金额为 price-coupon，最低为0。",
+    "before": "def run(price, coupon):\n    return max(0, price - coupon)\n",
+    "after": "def run(price, coupon):\n    return max(0, price)\n",
+    "expected_type": "wrong_calculation",
+    "explanation": "改动漏扣优惠券。",
+    "checks": [
+      {
+        "args": [
+          100,
+          20
+        ],
+        "expected": 80
+      },
+      {
+        "args": [
+          10,
+          20
+        ],
+        "expected": 0
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-02",
+    "split": "revision",
+    "requirement": "允许空列表；返回总和。",
+    "before": "def run(values):\n    return sum(values)\n",
+    "after": "def run(values):\n    total = 0\n    for value in values:\n        total += value\n    return total\n",
+    "expected_type": null,
+    "explanation": "显式循环与sum等价，不应报告性能或风格问题。",
+    "checks": [
+      {
+        "args": [
+          []
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          [
+            1,
+            2,
+            3
+          ]
+        ],
+        "expected": 6
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-03",
+    "split": "revision",
+    "requirement": "会员积分达到100即有资格，points为非负整数。",
+    "before": "def run(points):\n    return points >= 100\n",
+    "after": "def run(points):\n    return points > 100\n",
+    "expected_type": "boundary",
+    "explanation": "恰好100时被拒绝。",
+    "checks": [
+      {
+        "args": [
+          99
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          100
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          101
+        ],
+        "expected": true
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-04",
+    "split": "revision",
+    "requirement": "n为非负整数，size为正整数，返回向上取整的批次数。",
+    "before": "def run(n, size):\n    return (n + size - 1) // size\n",
+    "after": "def run(n, size):\n    return n // size + (1 if n % size else 0)\n",
+    "expected_type": null,
+    "explanation": "余数分支保留了最后不足一批的项目。",
+    "checks": [
+      {
+        "args": [
+          0,
+          3
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          7,
+          3
+        ],
+        "expected": 3
+      },
+      {
+        "args": [
+          6,
+          3
+        ],
+        "expected": 2
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-05",
+    "split": "revision",
+    "requirement": "rows含tenant和值，只返回请求tenant的value，顺序保持。",
+    "before": "def run(rows, tenant):\n    return [r[\"value\"] for r in rows if r[\"tenant\"] == tenant]\n",
+    "after": "def run(rows, tenant):\n    return [r[\"value\"] for r in rows]\n",
+    "expected_type": "missing_filter",
+    "explanation": "去掉租户过滤，混入其他租户的记录。",
+    "checks": [
+      {
+        "args": [
+          [
+            {
+              "tenant": "a",
+              "value": 1
+            },
+            {
+              "tenant": "b",
+              "value": 2
+            }
+          ],
+          "a"
+        ],
+        "expected": [
+          1
+        ]
+      },
+      {
+        "args": [
+          [],
+          "a"
+        ],
+        "expected": []
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-06",
+    "split": "revision",
+    "requirement": "返回新增name后的列表；不得修改调用者传入的items。",
+    "before": "def run(items, name):\n    return items + [name]\n",
+    "after": "def run(items, name):\n    copied = list(items)\n    copied.append(name)\n    return copied\n",
+    "expected_type": null,
+    "explanation": "修改的是副本，不是输入列表。",
+    "checks": [
+      {
+        "args": [
+          [
+            "a"
+          ],
+          "b"
+        ],
+        "expected": [
+          "a",
+          "b"
+        ]
+      },
+      {
+        "args": [
+          [],
+          "x"
+        ],
+        "expected": [
+          "x"
+        ]
+      }
+    ],
+    "preserve_input": true
+  },
+  {
+    "id": "case-07",
+    "split": "revision",
+    "requirement": "超时返回pending；未超时返回success。",
+    "before": "def run(timed_out):\n    return \"pending\" if timed_out else \"success\"\n",
+    "after": "def run(timed_out):\n    return \"success\"\n",
+    "expected_type": "wrong_status",
+    "explanation": "超时被当成成功。",
+    "checks": [
+      {
+        "args": [
+          true
+        ],
+        "expected": "pending"
+      },
+      {
+        "args": [
+          false
+        ],
+        "expected": "success"
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-08",
+    "split": "revision",
+    "requirement": "空字符串无效，其他字符串原样返回；空白字符串是合法值。",
+    "before": "def run(value):\n    return value if value != \"\" else None\n",
+    "after": "def run(value):\n    if not value:\n        return None\n    return value\n",
+    "expected_type": null,
+    "explanation": "字符串限定条件下判空等价；不能凭空加去空格规则。",
+    "checks": [
+      {
+        "args": [
+          ""
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          " "
+        ],
+        "expected": " "
+      },
+      {
+        "args": [
+          "ok"
+        ],
+        "expected": "ok"
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-09",
+    "split": "revision",
+    "requirement": "items为整数列表；返回升序副本，不得修改输入。",
+    "before": "def run(items):\n    return sorted(items)\n",
+    "after": "def run(items):\n    items.sort()\n    return items\n",
+    "expected_type": "state_leak",
+    "explanation": "返回值相同，但原地排序修改了输入。",
+    "checks": [
+      {
+        "args": [
+          [
+            2,
+            1
+          ]
+        ],
+        "expected": [
+          1,
+          2
+        ]
+      },
+      {
+        "args": [
+          [
+            3,
+            1,
+            2
+          ]
+        ],
+        "expected": [
+          1,
+          2,
+          3
+        ]
+      }
+    ],
+    "preserve_input": true
+  },
+  {
+    "id": "case-10",
+    "split": "revision",
+    "requirement": "金额均为整数分，退款为已付金额与请求金额的较小值；两者非负。",
+    "before": "def run(paid, requested):\n    return min(paid, requested)\n",
+    "after": "def run(paid, requested):\n    if requested > paid:\n        return paid\n    return requested\n",
+    "expected_type": null,
+    "explanation": "分支保持退款上限。",
+    "checks": [
+      {
+        "args": [
+          80,
+          100
+        ],
+        "expected": 80
+      },
+      {
+        "args": [
+          80,
+          20
+        ],
+        "expected": 20
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-11",
+    "split": "revision",
+    "requirement": "qty为整数；qty<=0返回None，否则返回qty*unit，unit非负。",
+    "before": "def run(qty, unit):\n    return None if qty <= 0 else qty * unit\n",
+    "after": "def run(qty, unit):\n    return qty * unit\n",
+    "expected_type": "missing_validation",
+    "explanation": "丢失非法数量校验。",
+    "checks": [
+      {
+        "args": [
+          0,
+          10
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          -1,
+          10
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          2,
+          10
+        ],
+        "expected": 20
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-12",
+    "split": "revision",
+    "requirement": "仅保留active为True的记录，返回其id；active字段是布尔值。",
+    "before": "def run(rows):\n    return [r[\"id\"] for r in rows if r[\"active\"] is True]\n",
+    "after": "def run(rows):\n    return [r[\"id\"] for r in rows if r[\"active\"]]\n",
+    "expected_type": null,
+    "explanation": "布尔类型约束下两者等价。",
+    "checks": [
+      {
+        "args": [
+          [
+            {
+              "id": 1,
+              "active": true
+            },
+            {
+              "id": 2,
+              "active": false
+            }
+          ]
+        ],
+        "expected": [
+          1
+        ]
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-13",
+    "split": "selection",
+    "requirement": "limit为正整数；size<=limit时允许上传。",
+    "before": "def run(size, limit):\n    return size <= limit\n",
+    "after": "def run(size, limit):\n    return size < limit\n",
+    "expected_type": "boundary",
+    "explanation": "上限恰好相等时误拒绝。",
+    "checks": [
+      {
+        "args": [
+          10,
+          10
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          11,
+          10
+        ],
+        "expected": false
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-14",
+    "split": "selection",
+    "requirement": "返回乘积，空列表返回1。",
+    "before": "def run(values):\n    result = 1\n    for v in values:\n        result *= v\n    return result\n",
+    "after": "def run(values):\n    result = 1\n    for v in values:\n        result = result * v\n    return result\n",
+    "expected_type": null,
+    "explanation": "赋值改写不改变行为。",
+    "checks": [
+      {
+        "args": [
+          []
+        ],
+        "expected": 1
+      },
+      {
+        "args": [
+          [
+            2,
+            3
+          ]
+        ],
+        "expected": 6
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-15",
+    "split": "selection",
+    "requirement": "只返回deleted=False的记录id，deleted为布尔值。",
+    "before": "def run(rows):\n    return [r[\"id\"] for r in rows if not r[\"deleted\"]]\n",
+    "after": "def run(rows):\n    return [r[\"id\"] for r in rows]\n",
+    "expected_type": "missing_filter",
+    "explanation": "删除标志被忽略。",
+    "checks": [
+      {
+        "args": [
+          [
+            {
+              "id": 1,
+              "deleted": false
+            },
+            {
+              "id": 2,
+              "deleted": true
+            }
+          ]
+        ],
+        "expected": [
+          1
+        ]
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-16",
+    "split": "selection",
+    "requirement": "为列表追加一项并返回副本，输入不得修改。",
+    "before": "def run(items, item):\n    return items + [item]\n",
+    "after": "def run(items, item):\n    result = items.copy()\n    result += [item]\n    return result\n",
+    "expected_type": null,
+    "explanation": "局部副本上的+=不会修改输入列表。",
+    "checks": [
+      {
+        "args": [
+          [
+            1
+          ],
+          2
+        ],
+        "expected": [
+          1,
+          2
+        ]
+      }
+    ],
+    "preserve_input": true
+  },
+  {
+    "id": "case-17",
+    "split": "selection",
+    "requirement": "支付确认前返回pending，确认后返回paid。",
+    "before": "def run(confirmed):\n    return \"paid\" if confirmed else \"pending\"\n",
+    "after": "def run(confirmed):\n    return \"paid\"\n",
+    "expected_type": "wrong_status",
+    "explanation": "未确认支付被标成已支付。",
+    "checks": [
+      {
+        "args": [
+          false
+        ],
+        "expected": "pending"
+      },
+      {
+        "args": [
+          true
+        ],
+        "expected": "paid"
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-18",
+    "split": "selection",
+    "requirement": "n为整数；负数返回None，0和正数原样返回。",
+    "before": "def run(n):\n    return n if n >= 0 else None\n",
+    "after": "def run(n):\n    if n < 0:\n        return None\n    return n\n",
+    "expected_type": null,
+    "explanation": "校验保留，没有缺失。",
+    "checks": [
+      {
+        "args": [
+          -1
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          0
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          3
+        ],
+        "expected": 3
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-19",
+    "split": "holdout",
+    "requirement": "总价为单价乘数量，unit和qty均非负整数。",
+    "before": "def run(unit, qty):\n    return unit * qty\n",
+    "after": "def run(unit, qty):\n    return unit + qty\n",
+    "expected_type": "wrong_calculation",
+    "explanation": "乘法被错误替换为加法。",
+    "checks": [
+      {
+        "args": [
+          10,
+          3
+        ],
+        "expected": 30
+      },
+      {
+        "args": [
+          10,
+          0
+        ],
+        "expected": 0
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-20",
+    "split": "holdout",
+    "requirement": "n>=0、size>0；计算页数，空数据0页。",
+    "before": "def run(n, size):\n    return (n + size - 1) // size\n",
+    "after": "def run(n, size):\n    whole, rest = divmod(n, size)\n    return whole + bool(rest)\n",
+    "expected_type": null,
+    "explanation": "bool参与整数加法保留向上取整行为。",
+    "checks": [
+      {
+        "args": [
+          0,
+          4
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          9,
+          4
+        ],
+        "expected": 3
+      },
+      {
+        "args": [
+          8,
+          4
+        ],
+        "expected": 2
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-21",
+    "split": "holdout",
+    "requirement": "返回替换key后的字典副本，原字典不得变化。",
+    "before": "def run(data, key, value):\n    return {**data, key: value}\n",
+    "after": "def run(data, key, value):\n    data[key] = value\n    return data\n",
+    "expected_type": "state_leak",
+    "explanation": "原地赋值泄漏修改到调用者。",
+    "checks": [
+      {
+        "args": [
+          {
+            "a": 1
+          },
+          "a",
+          2
+        ],
+        "expected": {
+          "a": 2
+        }
+      }
+    ],
+    "preserve_input": true
+  },
+  {
+    "id": "case-22",
+    "split": "holdout",
+    "requirement": "只返回给定owner的文档id，保留原顺序。",
+    "before": "def run(rows, owner):\n    return [r[\"id\"] for r in rows if r[\"owner\"] == owner]\n",
+    "after": "def run(rows, owner):\n    result = []\n    for r in rows:\n        if r[\"owner\"] == owner:\n            result.append(r[\"id\"])\n    return result\n",
+    "expected_type": null,
+    "explanation": "循环改写保留了访问过滤。",
+    "checks": [
+      {
+        "args": [
+          [
+            {
+              "owner": "a",
+              "id": 1
+            },
+            {
+              "owner": "b",
+              "id": 2
+            }
+          ],
+          "a"
+        ],
+        "expected": [
+          1
+        ]
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-23",
+    "split": "holdout",
+    "requirement": "age为整数；负数返回None，非负数返回其本身。",
+    "before": "def run(age):\n    return None if age < 0 else age\n",
+    "after": "def run(age):\n    return age\n",
+    "expected_type": "missing_validation",
+    "explanation": "删除负年龄校验。",
+    "checks": [
+      {
+        "args": [
+          -1
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          0
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          18
+        ],
+        "expected": 18
+      }
+    ],
+    "preserve_input": false
+  },
+  {
+    "id": "case-24",
+    "split": "holdout",
+    "requirement": "发送失败时返回retry，否则返回done。",
+    "before": "def run(failed):\n    return \"retry\" if failed else \"done\"\n",
+    "after": "def run(failed):\n    if failed:\n        return \"retry\"\n    return \"done\"\n",
+    "expected_type": null,
+    "explanation": "展开条件表达式不改变状态。",
+    "checks": [
+      {
+        "args": [
+          true
+        ],
+        "expected": "retry"
+      },
+      {
+        "args": [
+          false
+        ],
+        "expected": "done"
+      }
+    ],
+    "preserve_input": false
+  }
+]
