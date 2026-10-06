@@ -1,0 +1,8 @@
+# This project uses the Python standard library only. No third-party packages.
+[project]
+name = "review-loop-lab"
+version = "0.1.0"
+description = "A teaching lab that optimizes a review prompt from review feedback."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
