@@ -135,7 +135,8 @@ class Client:
                 except (urllib.error.URLError, TimeoutError) as exc:
                     raise CallFailure(f'API连接或超时错误：{type(exc).__name__}') from None
                 choice = body['choices'][0]
-                raw = choice['message']['content']
+                # 兼容两种返回格式：OpenAI 的 message 与部分网关的 delta。
+                raw = choice['message']['content'] if 'message' in choice else choice['delta']['content']
                 usage = body.get('usage') or {}
                 event['finish_reason'] = choice.get('finish_reason')
                 if choice.get('finish_reason') == 'length':

@@ -67,6 +67,15 @@ class LoopTests(unittest.TestCase):
             self.assertEqual(client.tokens,10)
             self.assertNotIn('test-key',(Path(td)/'calls.jsonl').read_text())
 
+    def test_live_wire_format_delta(self):
+        import io
+        with tempfile.TemporaryDirectory() as td, patch.dict('os.environ', {'LLM_API_KEY':'test-key', 'LLM_MODEL':'test-model'}):
+            client=loop.Client('live', Path(td), 3, 10)
+            body={'choices':[{'delta':{'content':'{"findings":[]}'},'finish_reason':'stop'}],'usage':{'total_tokens':7}}
+            with patch('urllib.request.urlopen',return_value=io.BytesIO(json.dumps(body).encode())):
+                self.assertEqual(client.ask('JSON','input','test'), {'findings':[]})
+            self.assertEqual(client.tokens,7)
+
     def test_budget_aborts(self):
         with tempfile.TemporaryDirectory() as td:
             client=loop.Client('demo',Path(td),1,10)
