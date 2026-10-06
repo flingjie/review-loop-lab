@@ -7,9 +7,11 @@ import difflib
 import hashlib
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import statistics
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -24,6 +26,8 @@ kind必须是以下之一：boundary(阈值边界比较错误)、wrong_calculati
 missing_filter(记录过滤缺失)、state_leak(意外修改输入)、wrong_status(状态映射错误)、missing_validation(非法输入校验缺失)。
 优先按直接根因分类：对非法输入的校验缺失用missing_validation；已有阈值比较符错误用boundary。
 不输出风格、性能猜测、缺失类型标注或需求未要求的建议。输出JSON，不要Markdown围栏。'''
+
+DEFAULT_WORKERS = int(os.environ.get('LLM_MAX_WORKERS', '8'))
 
 
 def dump(path, value):
@@ -88,6 +92,7 @@ class Client:
     def __init__(self, mode, out, max_calls, timeout):
         self.mode, self.out, self.max_calls, self.timeout = mode, out, max_calls, timeout
         self.calls, self.tokens, self.elapsed = 0, 0, 0.0
+        self._lock = threading.Lock()
         self.model = os.environ.get('LLM_MODEL', '')
         self.base = os.environ.get('LLM_BASE_URL', 'https://api.deepseek.com').rstrip('/')
         self.key = os.environ.get('LLM_API_KEY', '')
@@ -99,11 +104,13 @@ class Client:
             raise CallFailure('远程API必须使用https。')
 
     def ask(self, system, user, tag, case=None, round_id=0):
-        if self.calls >= self.max_calls:
-            raise CallFailure('达到调用预算，运行中止；没有生成最终实验结论。')
-        self.calls += 1
+        with self._lock:
+            if self.calls >= self.max_calls:
+                raise CallFailure('达到调用预算，运行中止；没有生成最终实验结论。')
+            self.calls += 1
+            call_no = self.calls
         start = time.monotonic()
-        event = {'call': self.calls, 'tag': tag, 'system': system, 'user': user, 'mode': self.mode}
+        event = {'call': call_no, 'tag': tag, 'system': system, 'user': user, 'mode': self.mode}
         try:
             if self.mode == 'demo':
                 # Intentionally scripted. This proves control flow, not model quality.
@@ -143,30 +150,34 @@ class Client:
                     event['raw'] = raw
                     raise ValueError('输出被截断；本次视为无效，不能静默接受')
             event['raw'], event['usage'] = raw, usage
-            self.tokens += usage.get('total_tokens', 0) or 0
+            with self._lock:
+                self.tokens += usage.get('total_tokens', 0) or 0
             return json.loads(raw)
         except Exception as exc:
             event['error'] = str(exc)
             raise
         finally:
             duration = time.monotonic() - start
-            self.elapsed += duration
             event['seconds'] = duration
-            with (self.out / 'calls.jsonl').open('a', encoding='utf-8') as f:
-                f.write(json.dumps(event, ensure_ascii=False) + '\n')
+            with self._lock:
+                self.elapsed += duration
+                with (self.out / 'calls.jsonl').open('a', encoding='utf-8') as f:
+                    f.write(json.dumps(event, ensure_ascii=False) + '\n')
 
 
-def evaluate(client, prompt, cases, tag):
-    rows = []
-    for c in cases:
+def evaluate(client, prompt, cases, tag, max_workers=DEFAULT_WORKERS):
+    def one(c):
         r = {'id': c['id'], 'expected_type': c['expected_type']}
         try:
             obj = client.ask(prompt + '\n\n固定输出协议：\n' + CONTRACT, json.dumps(public_case(c), ensure_ascii=False), tag + '/' + c['id'], case=c)
             r['response'] = validate_review(obj, c)
         except (ValueError, TypeError, KeyError, IndexError) as exc:
             r['error'] = str(exc)
+            print(f'[{tag}/{c["id"]}] 无效输出：{exc}', file=sys.stderr, flush=True)
         # Network failures and budget exhaustion abort; never count as success.
-        rows.append(r)
+        return r
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        rows = list(pool.map(one, cases))
     result = {'metrics': score(rows), 'rows': rows}
     dump(client.out / (tag.replace('/', '_') + '.json'), result)
     return result
@@ -226,6 +237,8 @@ def run(args):
     splits = {s: [c for c in cases if c['split'] == s] for s in ['revision', 'selection', 'holdout']}
     best = initial = (ROOT / 'prompts/reviewer.txt').read_text(encoding='utf-8')
     optimizer = (ROOT / 'prompts/optimizer.txt').read_text(encoding='utf-8')
+    workers = getattr(args, 'workers', DEFAULT_WORKERS)
+    print(f'[并发] 每批最多 {workers} 个并行请求', flush=True)
     (out / 'initial.txt').write_text(initial, encoding='utf-8')
     (out / 'best.txt').write_text(initial, encoding='utf-8')
     manifest = {'mode': args.mode, 'model': client.model if args.mode == 'live' else 'scripted-demo', 'temperature': client.temperature, 'max_tokens': client.max_tokens, 'rounds': args.rounds, 'max_calls': args.max_calls, 'timeout': args.timeout, 'holdout_repeats': args.holdout_repeats, 'hashes': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in [ROOT/'loop.py', ROOT/'data/cases.json', ROOT/'prompts/reviewer.txt', ROOT/'prompts/optimizer.txt']}}
@@ -235,11 +248,12 @@ def run(args):
     try:
         for n in range(1, args.rounds + 1):
             print(f'[{args.mode}] round {n}/{args.rounds}', flush=True)
-            dev = evaluate(client, best, splits['revision'], f'r{n}-revision')
+            dev = evaluate(client, best, splits['revision'], f'r{n}-revision', max_workers=workers)
             row = {'round': n, 'accepted': False}
             try:
                 proposal = validate_proposal(client.ask(optimizer, json.dumps({'current_prompt': best, **feedback(splits['revision'], dev)}, ensure_ascii=False), f'r{n}-optimizer', round_id=n))
             except (ValueError, TypeError, KeyError, IndexError) as exc:
+                print(f'[r{n}-optimizer] 候选无效：{exc}', file=sys.stderr, flush=True)
                 row['reason'] = '候选无效：' + str(exc)
                 rounds.append(row)
                 dump(out/'rounds.json', rounds)
@@ -251,7 +265,7 @@ def run(args):
             # Two independent comparisons; alternate order to reduce order effects.
             for repeat in range(2):
                 prompts = [('old', best), ('new', candidate)] if repeat == 0 else [('new', candidate), ('old', best)]
-                scores = {name: evaluate(client, prompt, splits['selection'], f'r{n}-selection-{repeat}-{name}')['metrics'] for name, prompt in prompts}
+                scores = {name: evaluate(client, prompt, splits['selection'], f'r{n}-selection-{repeat}-{name}', max_workers=workers)['metrics'] for name, prompt in prompts}
                 gates.append(scores)
             row['comparisons'] = gates
             row['accepted'] = all(better(g['new'], g['old']) for g in gates)
@@ -264,7 +278,7 @@ def run(args):
         holdout = {'initial': [], 'best': []}
         for i in range(args.holdout_repeats):
             for name, prompt in [('initial', initial), ('best', best)]:
-                holdout[name].append(evaluate(client, prompt, splits['holdout'], f'holdout-{i}-{name}')['metrics'])
+                holdout[name].append(evaluate(client, prompt, splits['holdout'], f'holdout-{i}-{name}', max_workers=workers)['metrics'])
         summary = {'mode': args.mode, 'rounds': rounds, 'holdout': holdout, 'calls': client.calls, 'tokens': client.tokens, 'seconds': client.elapsed}
         dump(out / 'summary.json', summary)
         report(out, summary)
@@ -314,6 +328,7 @@ def main():
     p.add_argument('--holdout-repeats', type=positive, default=3)
     p.add_argument('--max-calls', type=positive, default=250)
     p.add_argument('--timeout', type=positive, default=90)
+    p.add_argument('--workers', type=positive, default=DEFAULT_WORKERS)
     args = parser.parse_args()
     try:
         verify_fixtures() if args.command == 'verify-fixtures' else run(args)
